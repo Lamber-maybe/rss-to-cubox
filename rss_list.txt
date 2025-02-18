@@ -1,0 +1,2 @@
+https://wechat.doonsec.com/rss.xml,微信公众号
+https://forum.butian.net/Rss,奇安信攻防社区
