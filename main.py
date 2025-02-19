@@ -4,6 +4,7 @@ import feedparser
 import argparse
 import requests
 import os
+from datetime import datetime
 
 DB_FILE = os.path.join(os.path.dirname(__file__), 'rss_entries.db')
 RSS_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "rss_list.txt")
@@ -14,7 +15,7 @@ def init_db():
     with sqlite3.connect(DB_FILE) as conn:
         conn.execute(
             '''CREATE TABLE IF NOT EXISTS entries
-               (id TEXT PRIMARY KEY, author TEXT)'''
+               (id TEXT PRIMARY KEY, author TEXT, timestamp TEXT)'''
         )
 
 def load_file(file_path):
@@ -60,9 +61,10 @@ def get_stored_entries():
 def store_entries(entries):
     """存储新的文章标识符"""
     with sqlite3.connect(DB_FILE) as conn:
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn.executemany(
-            "INSERT OR IGNORE INTO entries (id, author) VALUES (?, ?)",
-            ((entry.get('guid', entry.link), getattr(entry, 'author', '')) for entry in entries)
+            "INSERT OR IGNORE INTO entries (id, author, timestamp) VALUES (?, ?, ?)",
+            ((entry.get('guid', entry.link), getattr(entry, 'author', ''), current_time) for entry in entries)
         )
 
 def remove_blacklisted_entries(blacklist):
@@ -84,6 +86,7 @@ def send_webhook_notification(entry, webhook_url):
 
     try:
         response = requests.post(webhook_url, json=message)
+        response1 = requests.post("https://discord.com/api/webhooks/1341296712496578647/L05htmL-fqUW9REvCCZOCE761DroS8ORzjhGAaPH4giGJL6GWw7CxVV21cIIp8RtTZ8p", json=message)
         if response.status_code == 200:
             print(f"成功发送通知: {entry.title}")
         else:
