@@ -1,7 +1,6 @@
 import time
 import sqlite3
 import feedparser
-import argparse
 import requests
 import os
 from datetime import datetime
@@ -9,6 +8,7 @@ from datetime import datetime
 DB_FILE = os.path.join(os.path.dirname(__file__), 'rss_entries.db')
 RSS_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "rss_list.txt")
 BLACKLIST_FILE = os.path.join(os.path.dirname(__file__), "black_author_list.txt")
+WEBHOOK_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "webhook_config.txt")
 
 def init_db():
     """初始化SQLite数据库"""
@@ -35,6 +35,11 @@ def load_rss_config():
         for line in lines
     ]
 
+def load_webhook_config():
+    """从本地文件加载Webhook配置"""
+    lines = load_file(WEBHOOK_CONFIG_FILE)
+    return [line.strip() for line in lines if line.strip()]
+
 def fetch_rss_feeds(rss_config):
     """获取多个RSS源的内容"""
     all_entries = []
@@ -43,6 +48,8 @@ def fetch_rss_feeds(rss_config):
             feed = feedparser.parse(config["url"])
             if feed.entries:
                 for entry in feed.entries:
+                    if 'author' not in entry.keys():
+                        entry['author'] = '匿名用户'  # 如果entry中没有author字段，则添加一个默认值
                     entry.source_folder = config["folder"]
                 all_entries.extend(feed.entries)
         except Exception as e:
@@ -64,43 +71,46 @@ def store_entries(entries):
         current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         conn.executemany(
             "INSERT OR IGNORE INTO entries (id, author, timestamp) VALUES (?, ?, ?)",
-            ((entry.get('guid', entry.link), getattr(entry, 'author', ''), current_time) for entry in entries)
+            ((entry.link, entry.author, current_time) for entry in entries)
         )
 
 def remove_blacklisted_entries(blacklist):
     """从数据库中移除黑名单作者的文章"""
     with sqlite3.connect(DB_FILE) as conn:
         conn.executemany(
-            "DELETE FROM entries WHERE author = ? AND author != ''",
+            "DELETE FROM entries WHERE author = ?",
             [(author,) for author in blacklist]
         )
 
-def send_webhook_notification(entry, webhook_url):
+def send_webhook_notification(entry, webhook_urls):
     """通过Webhook发送通知"""
     message = {
         "type": "url",
         "content": entry.link,
         "title": entry.title,
+        "tags": entry.author,
         "folder": entry.source_folder
     }
 
-    try:
-        response = requests.post(webhook_url, json=message)
-        response1 = requests.post("https://discord.com/api/webhooks/1341296712496578647/L05htmL-fqUW9REvCCZOCE761DroS8ORzjhGAaPH4giGJL6GWw7CxVV21cIIp8RtTZ8p", json=message)
-        if response.status_code == 200:
-            print(f"成功发送通知: {entry.title}")
-        else:
-            print(f"发送通知失败，状态码: {response.status_code}")
-    except Exception as e:
-        print(f"Webhook请求失败: {e}")
+    for webhook_url in webhook_urls:
+        try:
+            response = requests.post(webhook_url, json=message)
+            if response.status_code == 200:
+                print(f"成功发送通知到 {webhook_url}: {entry.title}")
+            else:
+                print(f"发送通知到 {webhook_url} 失败，状态码: {response.status_code}")
+        except Exception as e:
+            print(f"Webhook请求到 {webhook_url} 失败: {e}")
 
 def main():
     """主程序"""
-    parser = argparse.ArgumentParser(description='RSS to Webhook')
-    parser.add_argument('--webhook', required=True, help='Cubox API URL')
-    args = parser.parse_args()
-
     init_db()
+
+    # 加载webhook配置
+    webhook_urls = load_webhook_config()
+    if not webhook_urls:
+        print("未找到有效的webhook配置")
+        return
 
     blacklist = load_blacklist()
     remove_blacklisted_entries(blacklist)
@@ -111,12 +121,12 @@ def main():
         stored_entries = get_stored_entries()
         new_entries = [
             entry for entry in entries
-            if entry.get('guid', entry.link) not in stored_entries
-            and (getattr(entry, 'author', '') == '' or getattr(entry, 'author', '') not in blacklist)
+            if entry.link not in stored_entries
+            and entry.author not in blacklist
         ]
 
         for entry in new_entries:
-            send_webhook_notification(entry, args.webhook)
+            send_webhook_notification(entry, webhook_urls)
             time.sleep(3)
 
         store_entries(new_entries)
