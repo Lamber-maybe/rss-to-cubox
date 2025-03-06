@@ -30,8 +30,10 @@
 
 运行脚本时需要提供Webhook URL：
 
+新建 `webhook_config.txt` 将消息通知用的webhook放在该文件中，然后运行脚本
+
 ```
-python main.py --webhook YOUR_CUBOX_API_URL
+python main.py
 ```
 
 
