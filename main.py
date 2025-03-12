@@ -88,14 +88,14 @@ def send_webhook_notification(entry, webhook_urls):
         "type": "url",
         "content": entry.link,
         "title": entry.title,
-        "tags": entry.author,
+        "tags": [entry.author],  # 将tags改为数组形式
         "folder": entry.source_folder
     }
 
     for webhook_url in webhook_urls:
         try:
             response = requests.post(webhook_url, json=message)
-            if response.status_code == 200:
+            if response.status_code // 100 == 2:  # 检查状态码是否为2xx
                 print(f"成功发送通知到 {webhook_url}: {entry.title}")
             else:
                 print(f"发送通知到 {webhook_url} 失败，状态码: {response.status_code}")
@@ -108,6 +108,7 @@ def main():
 
     # 加载webhook配置
     webhook_urls = load_webhook_config()
+    print(webhook_urls)
     if not webhook_urls:
         print("未找到有效的webhook配置")
         return
@@ -133,4 +134,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
