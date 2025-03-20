@@ -94,7 +94,7 @@ def send_webhook_notification(entry, webhook_urls):
 
     for webhook_url in webhook_urls:
         try:
-            response = requests.post(webhook_url, json=message)
+            response = requests.post(webhook_url, json=message, timeout=20)
             if response.status_code // 100 == 2:  # 检查状态码是否为2xx
                 print(f"成功发送通知到 {webhook_url}: {entry.title}")
             else:
